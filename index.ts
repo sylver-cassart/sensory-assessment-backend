@@ -1,9 +1,9 @@
-import express, { type Request, Response, NextFunction } from "express";
-import { registerRoutes } from "./server/routes";
+const express = require('express');
+const { createServer } = require('http');
 
 const app = express();
 
-// Enable CORS for frontend domain
+// Enable CORS
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', process.env.FRONTEND_URL || '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
@@ -20,55 +20,131 @@ app.use((req, res, next) => {
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// Logging middleware
-app.use((req, res, next) => {
-  const start = Date.now();
-  const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
+// In-memory storage
+const storage = {
+  users: new Map(),
+  students: new Map(),
+  assessments: new Map(),
+  currentUserId: 1,
+  currentStudentId: 1,
+  currentAssessmentId: 1
+};
 
-  const originalResJson = res.json;
-  res.json = function (bodyJson, ...args) {
-    capturedJsonResponse = bodyJson;
-    return originalResJson.apply(res, [bodyJson, ...args]);
-  };
-
-  res.on("finish", () => {
-    const duration = Date.now() - start;
-    if (path.startsWith("/api")) {
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
-      }
-
-      if (logLine.length > 80) {
-        logLine = logLine.slice(0, 79) + "…";
-      }
-
-      console.log(logLine);
-    }
-  });
-
-  next();
+// API Routes
+app.post("/api/users", async (req, res) => {
+  try {
+    const { email, firebaseUid, name } = req.body;
+    const id = storage.currentUserId++;
+    const user = { 
+      id,
+      email,
+      firebaseUid,
+      name,
+      createdAt: new Date(),
+    };
+    storage.users.set(id, user);
+    res.json(user);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
 });
 
-(async () => {
-  const server = await registerRoutes(app);
+app.get("/api/users/firebase/:firebaseUid", async (req, res) => {
+  try {
+    const { firebaseUid } = req.params;
+    const user = Array.from(storage.users.values()).find(
+      (user) => user.firebaseUid === firebaseUid,
+    );
+    
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    
+    res.json(user);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
 
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-    const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
+app.post("/api/students", async (req, res) => {
+  try {
+    const { name, school, class: studentClass } = req.body;
+    const id = storage.currentStudentId++;
+    const student = { 
+      id,
+      name,
+      school,
+      class: studentClass,
+      createdAt: new Date(),
+    };
+    storage.students.set(id, student);
+    res.json(student);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
 
-    res.status(status).json({ message });
-    console.error(err);
-  });
+app.get("/api/students/:id", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const student = storage.students.get(id);
+    
+    if (!student) {
+      return res.status(404).json({ message: "Student not found" });
+    }
+    
+    res.json(student);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
 
-  // Health check endpoint
-  app.get('/health', (req, res) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString() });
-  });
+app.post("/api/assessments", async (req, res) => {
+  try {
+    const { studentId, teacherId, assessmentDate, responses, scores, status, additionalNotes } = req.body;
+    const id = storage.currentAssessmentId++;
+    const assessment = { 
+      id,
+      studentId,
+      teacherId,
+      assessmentDate: new Date(assessmentDate),
+      responses,
+      scores,
+      status: status || "draft",
+      additionalNotes,
+      createdAt: new Date(),
+      completedAt: status === "completed" ? new Date() : null,
+    };
+    storage.assessments.set(id, assessment);
+    res.json(assessment);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
 
-  const port = parseInt(process.env.PORT || '3000', 10);
-  server.listen(port, '0.0.0.0', () => {
-    console.log(`Backend server running on port ${port}`);
-  });
-})();
+app.get("/api/assessments/:id", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const assessment = storage.assessments.get(id);
+    
+    if (!assessment) {
+      return res.status(404).json({ message: "Assessment not found" });
+    }
+    
+    res.json(assessment);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Health check
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+const port = parseInt(process.env.PORT || '3000', 10);
+const server = createServer(app);
+
+server.listen(port, '0.0.0.0', () => {
+  console.log(`Backend server running on port ${port}`);
+});
