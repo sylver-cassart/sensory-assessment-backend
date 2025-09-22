@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { z } from "zod";
 import { storage } from "./storage";
-import { insertUserSchema, insertStudentSchema, insertAssessmentSchema, assessmentResponsesSchema, assessmentScoresSchema } from "@shared/schema";
+import { insertUserSchema, insertStudentSchema, insertAssessmentSchema, assessmentResponsesSchema, assessmentScoresSchema } from "../shared/schema.js";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // User routes
