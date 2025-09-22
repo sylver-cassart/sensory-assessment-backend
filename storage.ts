@@ -1,4 +1,4 @@
-import { users, students, assessments, type User, type Student, type Assessment, type InsertUser, type InsertStudent, type InsertAssessment } from "@shared/schema";
+import { users, students, assessments, type User, type Student, type Assessment, type InsertUser, type InsertStudent, type InsertAssessment } from "../shared/schema.js";
 
 export interface IStorage {
   // User methods
